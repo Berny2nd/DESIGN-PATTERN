@@ -10,7 +10,10 @@ public class Main {
         System.out.println("=================================");
         System.out.print("Enter your name: ");
         String name = scanner.nextLine().trim();
-        if (name.isEmpty()) name = "Hero";
+
+        if (name.isEmpty()) {
+            name = "Hero";
+        }
 
         System.out.println("\nHello, " + name + "! Choose your role:");
         System.out.println("1. Knight  (HP: 250 | Mana:  50 | Speed: 3)");
@@ -27,37 +30,31 @@ public class Main {
             }
         }
 
-        // ── FACTORY METHOD PATTERN ─────────────────────────────────
-        CharacterFactory factory = new CharacterFactory();
         Character player;
-
-        if (roleChoice == 2) {
-            // Mage needs affinity input before factory call
-            System.out.println("\nChoose your elemental affinity:");
-            System.out.println("1. Fire  2. Ice  3. Lightning");
-            int elem = 0;
-            while (elem < 1 || elem > 3) {
-                System.out.print("Enter 1, 2, or 3: ");
-                try {
-                    elem = Integer.parseInt(scanner.nextLine().trim());
-                } catch (NumberFormatException e) {
-                    System.out.println("Please enter a number.");
+        switch (roleChoice) {
+            case 1 -> player = new Knight(name);
+            case 2 -> {
+                System.out.println("\nChoose your elemental affinity:");
+                System.out.println("1. Fire  2. Ice  3. Lightning");
+                int elem = 0;
+                while (elem < 1 || elem > 3) {
+                    System.out.print("Enter 1, 2, or 3: ");
+                    try {
+                        elem = Integer.parseInt(scanner.nextLine().trim());
+                    } catch (NumberFormatException e) {
+                        System.out.println("Please enter a number.");
+                    }
                 }
+                Mage.Element affinity = switch (elem) {
+                    case 1 -> Mage.Element.FIRE;
+                    case 2 -> Mage.Element.ICE;
+                    default -> Mage.Element.LIGHTNING;
+                };
+                player = new Mage(name, affinity);
             }
-            MageAbilityStrategy.Element affinity = switch (elem) {
-                case 1  -> MageAbilityStrategy.Element.FIRE;
-                case 2  -> MageAbilityStrategy.Element.ICE;
-                default -> MageAbilityStrategy.Element.LIGHTNING;
-            };
-            player = factory.createMage(name, affinity);
-        } else if (roleChoice == 1) {
-            player = factory.createKnight(name);
-        } else {
-            player = factory.createArcher(name);
+            default -> player = new Archer(name);
         }
-        // ──────────────────────────────────────────────────────────
 
-        // Repository pattern (already present in original codebase)
         PlayerRepository repo = new PlayerRepository();
         repo.savePlayer(name, player.getClass().getSimpleName().toUpperCase());
 

@@ -3,30 +3,13 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
 
-/**
- * CombatManager — refactored with STRATEGY PATTERN.
- *
- * Key change: showAbilityMenu() no longer contains
- *
- *   if (player instanceof Knight) { ... }
- *   else if (player instanceof Mage) { ... }
- *   else if (player instanceof Archer) { ... }
- *
- * Instead it asks the player's AbilityStrategy for its menu lines,
- * then delegates execution back through player.useAbility().
- * CombatManager has zero knowledge of Knight, Mage, or Archer.
- *
- * Testability benefit:
- *   - CombatManager can be unit-tested with any Character that holds
- *     a mock/stub AbilityStrategy — no real role class needed.
- *   - Adding a new role (e.g. Cleric) requires zero changes here.
- */
 public class CombatManager {
 
-    private final Character   player;
+    private final Character player;
     private final List<Enemy> enemies;
-    private final Scanner     scanner;
+    private final Scanner scanner;
 
+    // Tracks which enemies have already granted their kill bonus
     private final Set<Enemy> boostedKills = new HashSet<>();
 
     public CombatManager(Character player, List<Enemy> enemies, Scanner scanner) {
@@ -35,15 +18,13 @@ public class CombatManager {
         this.scanner = scanner;
     }
 
-    // ── Main combat loop ───────────────────────────────────────────
-
     public boolean runCombat() {
         System.out.println("\n--- Combat Start ---");
         printCombatants();
 
         while (player.isAlive() && hasAliveEnemies()) {
             playerTurn();
-            checkAndApplyKillBoosts();
+            checkAndApplyKillBoosts(); // boost player for any fresh kills
             if (!hasAliveEnemies()) break;
             enemyTurn();
             tickAllEffects();
@@ -54,12 +35,17 @@ public class CombatManager {
             System.out.println("\n" + player.getName() + " has been defeated...");
             return false;
         }
+
         System.out.println("\nAll enemies defeated!");
         return true;
     }
 
     // ── Kill boost ─────────────────────────────────────────────────
 
+    /**
+     * After every player action, check if any enemy just died for the first time.
+     * If so, apply that enemy's stat multiplier to the player.
+     */
     private void checkAndApplyKillBoosts() {
         for (Enemy e : enemies) {
             if (!e.isAlive() && !boostedKills.contains(e)) {
@@ -96,7 +82,7 @@ public class CombatManager {
                 Enemy target = pickEnemyTarget();
                 if (target != null) player.attack(target);
             }
-            case 2 -> showAbilityMenu();   // ← no instanceof here
+            case 2 -> showAbilityMenu();
             case 3 -> showItemMenu();
             case 4 -> player.defend();
             default -> System.out.println("Invalid choice. Turn skipped.");
@@ -106,21 +92,27 @@ public class CombatManager {
     private void showActionMenu() {
         System.out.println("1. Basic Attack");
         System.out.println("2. Use Ability");
-        System.out.println("3. Use Item"
-                + (player.getInventory().isEmpty() ? " (empty)" : ""));
+        System.out.println("3. Use Item" + (player.getInventory().isEmpty() ? " (empty)" : ""));
         System.out.println("4. Defend (halve incoming damage)");
         System.out.print("Choose action: ");
     }
-
-    /**
-     * STRATEGY PATTERN in action:
-     * Asks the strategy for display lines, then delegates execution.
-     * No knowledge of Knight / Mage / Archer required.
-     */
+// CombatManager.showAbilityMenu()
     private void showAbilityMenu() {
-        AbilityStrategy strategy = player.getAbilityStrategy();
-        for (String line : strategy.getAbilityMenuLines()) {
-            System.out.println(line);
+        if (player instanceof Knight) {
+            System.out.println("1. Taunt        (force enemies to target you, 2 turns)");
+            System.out.println("2. Shield Wall  (block chance 90%, no attack)");
+            System.out.println("3. Lay on Hands (heal lowest HP ally 30% maxHP, once)");
+            System.out.println("4. Whirlwind    (AoE 80% dmg to all enemies, 20 mana)");
+        } else if (player instanceof Mage) {
+            System.out.println("1. Fireball         (45 dmg + Burnt, 30 mana)");
+            System.out.println("2. Ice Lance        (35 dmg + Stun,  25 mana)");
+            System.out.println("3. Lightning Strike (AoE 20 dmg + Shock, 20 mana)");
+            System.out.println("4. Mana Shield      (toggle damage → mana first)");
+        } else if (player instanceof Archer) {
+            System.out.println("1. Poison Arrow    (15 dmg + poison stack)");
+            System.out.println("2. Area Volley     (AoE 70% dmg, 20 mana)");
+            System.out.println("3. Eagle Eye       (next shot: +accuracy +crit)");
+            System.out.println("4. Silent Takedown (300% crit, 30 mana, once per combat)");
         }
         System.out.print("Choose ability: ");
         int abilityChoice = readInt();
@@ -151,20 +143,16 @@ public class CombatManager {
             if (!enemy.isAlive()) continue;
 
             if (enemy.hasStatusEffect(StatusEffect.Type.STUNNED)) {
-                System.out.println(enemy.getName()
-                        + " is stunned and skips their turn!");
+                System.out.println(enemy.getName() + " is stunned and skips their turn!");
                 continue;
             }
-            if (enemy.hasStatusEffect(StatusEffect.Type.SHOCKED)
-                    && Math.random() < 0.30) {
-                System.out.println(enemy.getName()
-                        + " is shocked and cannot act!");
+            if (enemy.hasStatusEffect(StatusEffect.Type.SHOCKED) && Math.random() < 0.30) {
+                System.out.println(enemy.getName() + " is shocked and cannot act!");
                 continue;
             }
 
             Character target;
-            if (enemy.getTauntTarget() != null
-                    && enemy.getTauntTarget().isAlive()) {
+            if (enemy.getTauntTarget() != null && enemy.getTauntTarget().isAlive()) {
                 target = enemy.getTauntTarget();
             } else {
                 enemy.clearTaunt();
@@ -177,7 +165,7 @@ public class CombatManager {
         }
     }
 
-    // ── Tick effects ───────────────────────────────────────────────
+    // ── Tick DoT effects ───────────────────────────────────────────
 
     private void tickAllEffects() {
         player.tickEffects();
@@ -196,8 +184,7 @@ public class CombatManager {
         System.out.println("Choose target:");
         for (int i = 0; i < alive.size(); i++) {
             System.out.println((i + 1) + ". " + alive.get(i).getName()
-                    + " (HP: " + alive.get(i).getHp()
-                    + "/" + alive.get(i).getMaxHp() + ")");
+                    + " (HP: " + alive.get(i).getHp() + "/" + alive.get(i).getMaxHp() + ")");
         }
         System.out.print("Target: ");
         int t = readInt() - 1;
